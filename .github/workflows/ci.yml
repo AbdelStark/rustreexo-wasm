@@ -1,0 +1,179 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable, beta]
+        exclude:
+          # Reduce CI load by testing beta only on Ubuntu
+          - os: windows-latest
+            rust: beta
+          - os: macos-latest
+            rust: beta
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        cache-on-failure: true
+
+    - name: Install wasm-pack
+      uses: jetli/wasm-pack-action@v0.4.0
+      with:
+        version: 'latest'
+
+    - name: Check code formatting
+      run: cargo fmt --all -- --check
+
+    - name: Run Clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+
+    - name: Run Rust tests
+      run: cargo test --verbose --all-features
+
+    - name: Run WASM tests (Node.js)
+      run: wasm-pack test --node
+
+    - name: Run WASM tests (Browser - headless)
+      run: wasm-pack test --chrome --headless
+      if: matrix.os == 'ubuntu-latest'
+
+  wasm-build:
+    name: WASM Build Test
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install wasm-pack
+      uses: jetli/wasm-pack-action@v0.4.0
+
+    - name: Build WASM for web
+      run: wasm-pack build --target web --out-dir pkg-web
+
+    - name: Build WASM for Node.js
+      run: wasm-pack build --target nodejs --out-dir pkg-node
+
+    - name: Build WASM for bundlers
+      run: wasm-pack build --target bundler --out-dir pkg-bundler
+
+    - name: Test package sizes
+      run: |
+        echo "📦 WASM Package Sizes:"
+        echo "Web target:"
+        ls -lh pkg-web/*.wasm | awk '{print "  " $9 ": " $5}'
+        echo "Node.js target:"
+        ls -lh pkg-node/*.wasm | awk '{print "  " $9 ": " $5}'
+        echo "Bundler target:"
+        ls -lh pkg-bundler/*.wasm | awk '{print "  " $9 ": " $5}'
+
+  examples:
+    name: Test Examples
+    runs-on: ubuntu-latest
+    needs: wasm-build
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install wasm-pack
+      uses: jetli/wasm-pack-action@v0.4.0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: examples/package-lock.json
+
+    - name: Install example dependencies
+      run: cd examples && npm ci
+
+    - name: Build WASM for Node.js
+      run: wasm-pack build --target nodejs --out-dir pkg-node
+
+    - name: Test basic Node.js example
+      run: cd examples && node basic_usage.cjs
+
+    - name: Test comprehensive Node.js example
+      run: cd examples && node nodejs_example.cjs
+
+    - name: Build WASM for web
+      run: wasm-pack build --target web --out-dir pkg
+
+    - name: Install browser testing dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y chromium-browser
+
+    - name: Test browser example (build only)
+      run: |
+        echo "Browser example would be tested here with headless browser"
+        echo "Checking HTML file exists and has correct imports"
+        grep -q "rustreexo_wasm.js" examples/browser_example.html
+
+  docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Build documentation
+      run: cargo doc --no-deps --all-features
+
+    - name: Upload documentation
+      uses: actions/upload-artifact@v4
+      with:
+        name: rust-docs
+        path: target/doc/
+        retention-days: 30

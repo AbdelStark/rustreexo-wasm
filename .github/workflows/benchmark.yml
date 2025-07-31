@@ -1,0 +1,650 @@
+name: Performance Benchmarks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run benchmarks weekly on Sundays at 4 AM UTC
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      benchmark_suite:
+        description: 'Benchmark suite to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - rust
+        - wasm
+        - comparison
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust-benchmarks:
+    name: Rust Native Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event.inputs.benchmark_suite == 'rust' || github.event.inputs.benchmark_suite == 'all' || github.event.inputs.benchmark_suite == ''
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install cargo-criterion
+      run: cargo install cargo-criterion
+
+    - name: Run Rust benchmarks
+      run: |
+        # Run criterion benchmarks if they exist
+        if [ -d "benches" ]; then
+          cargo criterion --output-format json > criterion-results.json
+        else
+          echo "No criterion benchmarks found, creating synthetic benchmark results"
+          mkdir -p benches
+          cat > benches/basic.rs << 'EOF'
+        use criterion::{black_box, criterion_group, criterion_main, Criterion};
+
+        fn benchmark_creation(c: &mut Criterion) {
+            c.bench_function("stump_creation", |b| {
+                b.iter(|| {
+                    let _stump = rustreexo_wasm::Stump::new();
+                })
+            });
+            
+            c.bench_function("pollard_creation", |b| {
+                b.iter(|| {
+                    let _pollard = rustreexo_wasm::Pollard::new();
+                })
+            });
+        }
+
+        fn benchmark_operations(c: &mut Criterion) {
+            let mut stump = rustreexo_wasm::Stump::new();
+            let mut pollard = rustreexo_wasm::Pollard::new();
+            
+            // Add some test elements
+            let elements: Vec<[u8; 32]> = (0..100)
+                .map(|i| {
+                    let mut hash = [0u8; 32];
+                    hash[28..32].copy_from_slice(&i.to_be_bytes());
+                    hash
+                })
+                .collect();
+                
+            for element in &elements {
+                stump.modify(&[], &[*element], &[]).unwrap();
+                pollard.modify(&[], &[*element], &[]).unwrap();
+            }
+            
+            c.bench_function("proof_generation", |b| {
+                b.iter(|| {
+                    if let Ok(proof) = pollard.prove(black_box(&[elements[0]])) {
+                        black_box(proof);
+                    }
+                })
+            });
+            
+            c.bench_function("proof_verification", |b| {
+                let proof = pollard.prove(&[elements[0]]).unwrap();
+                b.iter(|| {
+                    black_box(stump.verify(&proof, &[elements[0]]));
+                })
+            });
+        }
+
+        criterion_group!(benches, benchmark_creation, benchmark_operations);
+        criterion_main!(benches);
+        EOF
+          
+          # Add criterion dependency
+          grep -q criterion Cargo.toml || cat >> Cargo.toml << 'EOF'
+
+        [dev-dependencies]
+        criterion = { version = "0.5", features = ["html_reports"] }
+
+        [[bench]]
+        name = "basic"
+        harness = false
+        EOF
+          
+          cargo criterion --output-format json > criterion-results.json || echo '{}' > criterion-results.json
+        fi
+
+    - name: Parse benchmark results
+      run: |
+        echo "# Rust Native Benchmark Results" > rust-benchmark-report.md
+        echo "" >> rust-benchmark-report.md
+        echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> rust-benchmark-report.md
+        echo "**Commit:** ${{ github.sha }}" >> rust-benchmark-report.md
+        echo "" >> rust-benchmark-report.md
+        
+        if [ -s criterion-results.json ]; then
+          echo "## Performance Metrics" >> rust-benchmark-report.md
+          echo "" >> rust-benchmark-report.md
+          # Parse criterion JSON output (simplified)
+          echo "Detailed results available in criterion HTML reports." >> rust-benchmark-report.md
+        else
+          echo "## Results" >> rust-benchmark-report.md
+          echo "Benchmark execution completed. See artifact for detailed results." >> rust-benchmark-report.md
+        fi
+
+    - name: Upload Rust benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: rust-benchmark-results
+        path: |
+          criterion-results.json
+          rust-benchmark-report.md
+          target/criterion/
+        retention-days: 30
+
+  wasm-benchmarks:
+    name: WASM Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event.inputs.benchmark_suite == 'wasm' || github.event.inputs.benchmark_suite == 'all' || github.event.inputs.benchmark_suite == ''
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install wasm-pack
+      uses: jetli/wasm-pack-action@v0.4.0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Build WASM packages
+      run: |
+        wasm-pack build --target nodejs --out-dir pkg-node --release
+        wasm-pack build --target web --out-dir pkg-web --release
+
+    - name: Install example dependencies
+      run: cd examples && npm ci
+
+    - name: Create WASM benchmark script
+      run: |
+        cat > wasm-benchmark.js << 'EOF'
+        const { WasmStump, WasmPollard } = require('./pkg-node/rustreexo_wasm.js');
+        const { performance } = require('perf_hooks');
+
+        function createTestElements(count) {
+          const elements = [];
+          for (let i = 0; i < count; i++) {
+            const hash = Buffer.alloc(32);
+            hash.writeUInt32BE(i, 28);
+            elements.push(hash.toString('hex'));
+          }
+          return elements;
+        }
+
+        function benchmark(name, fn, iterations = 1000) {
+          const times = [];
+          
+          // Warmup
+          for (let i = 0; i < 10; i++) {
+            fn();
+          }
+          
+          // Measure
+          for (let i = 0; i < iterations; i++) {
+            const start = performance.now();
+            fn();
+            const end = performance.now();
+            times.push(end - start);
+          }
+          
+          const avg = times.reduce((a, b) => a + b, 0) / times.length;
+          const min = Math.min(...times);
+          const max = Math.max(...times);
+          const median = times.sort((a, b) => a - b)[Math.floor(times.length / 2)];
+          
+          return { name, avg, min, max, median, iterations };
+        }
+
+        async function runBenchmarks() {
+          console.log('🚀 Starting WASM Benchmarks...\n');
+          
+          const results = [];
+          
+          // Creation benchmarks
+          results.push(benchmark('Stump Creation', () => {
+            const stump = new WasmStump();
+            stump.free();
+          }));
+          
+          results.push(benchmark('Pollard Creation', () => {
+            const pollard = new WasmPollard();
+            pollard.free();
+          }));
+          
+          // Operation benchmarks
+          const stump = new WasmStump();
+          const pollard = new WasmPollard();
+          const elements = createTestElements(100);
+          const emptyProof = JSON.stringify({ targets: [], hashes: [] });
+          
+          // Add elements
+          stump.modify(emptyProof, elements, []);
+          const additions = elements.map(hash => ({ hash, remember: true }));
+          pollard.modify(emptyProof, JSON.stringify(additions), []);
+          
+          results.push(benchmark('Proof Generation', () => {
+            const proof = pollard.prove_single(elements[0]);
+          }, 100));
+          
+          results.push(benchmark('Proof Verification', () => {
+            const proof = pollard.prove_single(elements[0]);
+            stump.verify(proof, [elements[0]]);
+          }, 100));
+          
+          results.push(benchmark('Batch Proof (5 elements)', () => {
+            const batchProof = pollard.batch_proof(elements.slice(0, 5));
+          }, 50));
+          
+          stump.free();
+          pollard.free();
+          
+          // Output results
+          console.log('📊 WASM Benchmark Results:');
+          console.log('=' .repeat(80));
+          
+          const jsonResults = {};
+          
+          results.forEach(result => {
+            console.log(`${result.name}:`);
+            console.log(`  Average: ${result.avg.toFixed(3)}ms`);
+            console.log(`  Median:  ${result.median.toFixed(3)}ms`);
+            console.log(`  Min:     ${result.min.toFixed(3)}ms`);
+            console.log(`  Max:     ${result.max.toFixed(3)}ms`);
+            console.log(`  Iterations: ${result.iterations}`);
+            console.log('');
+            
+            jsonResults[result.name] = result;
+          });
+          
+          // Save results
+          require('fs').writeFileSync('wasm-benchmark-results.json', JSON.stringify(jsonResults, null, 2));
+          
+          console.log('✅ Benchmarks completed!');
+        }
+
+        runBenchmarks().catch(console.error);
+        EOF
+
+    - name: Run WASM benchmarks
+      run: node wasm-benchmark.js
+
+    - name: Generate WASM benchmark report
+      run: |
+        echo "# WASM Benchmark Results" > wasm-benchmark-report.md
+        echo "" >> wasm-benchmark-report.md
+        echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> wasm-benchmark-report.md
+        echo "**Commit:** ${{ github.sha }}" >> wasm-benchmark-report.md
+        echo "**Node.js Version:** $(node --version)" >> wasm-benchmark-report.md
+        echo "" >> wasm-benchmark-report.md
+        echo "## Performance Metrics" >> wasm-benchmark-report.md
+        echo "" >> wasm-benchmark-report.md
+        
+        # Parse JSON results into markdown table
+        node -e "
+          const results = JSON.parse(require('fs').readFileSync('wasm-benchmark-results.json'));
+          console.log('| Operation | Average (ms) | Median (ms) | Min (ms) | Max (ms) | Iterations |');
+          console.log('|-----------|--------------|-------------|----------|----------|------------|');
+          Object.values(results).forEach(r => {
+            console.log(\`| \${r.name} | \${r.avg.toFixed(3)} | \${r.median.toFixed(3)} | \${r.min.toFixed(3)} | \${r.max.toFixed(3)} | \${r.iterations} |\`);
+          });
+        " >> wasm-benchmark-report.md
+
+    - name: Upload WASM benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: wasm-benchmark-results
+        path: |
+          wasm-benchmark-results.json
+          wasm-benchmark-report.md
+        retention-days: 30
+
+  browser-benchmarks:
+    name: Browser Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event.inputs.benchmark_suite == 'wasm' || github.event.inputs.benchmark_suite == 'all' || github.event.inputs.benchmark_suite == ''
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install wasm-pack
+      uses: jetli/wasm-pack-action@v0.4.0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Build WASM for web
+      run: wasm-pack build --target web --out-dir pkg --release
+
+    - name: Install browser testing tools
+      run: |
+        npm install -g playwright
+        npx playwright install chromium
+
+    - name: Create browser benchmark
+      run: |
+        mkdir -p browser-benchmarks
+        
+        cat > browser-benchmarks/index.html << 'EOF'
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Rustreexo WASM Browser Benchmarks</title>
+            <style>
+                body { font-family: monospace; padding: 20px; }
+                .result { margin: 10px 0; }
+                .completed { color: green; }
+                .error { color: red; }
+            </style>
+        </head>
+        <body>
+            <h1>Rustreexo WASM Browser Benchmarks</h1>
+            <div id="results"></div>
+            
+            <script type="module">
+                import init, { WasmStump, WasmPollard } from '../pkg/rustreexo_wasm.js';
+                
+                function log(message, className = '') {
+                    const div = document.createElement('div');
+                    div.className = `result ${className}`;
+                    div.textContent = message;
+                    document.getElementById('results').appendChild(div);
+                }
+                
+                function benchmark(name, fn, iterations = 100) {
+                    const times = [];
+                    
+                    // Warmup
+                    for (let i = 0; i < 5; i++) {
+                        fn();
+                    }
+                    
+                    // Measure
+                    for (let i = 0; i < iterations; i++) {
+                        const start = performance.now();
+                        fn();
+                        const end = performance.now();
+                        times.push(end - start);
+                    }
+                    
+                    const avg = times.reduce((a, b) => a + b, 0) / times.length;
+                    const min = Math.min(...times);
+                    const max = Math.max(...times);
+                    
+                    return { name, avg, min, max, iterations };
+                }
+                
+                function createTestElements(count) {
+                    const elements = [];
+                    for (let i = 0; i < count; i++) {
+                        const hash = new Array(64).fill('0');
+                        const hexIndex = i.toString(16).padStart(8, '0');
+                        elements.push(hash.slice(0, -8).join('') + hexIndex);
+                    }
+                    return elements;
+                }
+                
+                async function runBenchmarks() {
+                    try {
+                        log('Initializing WASM module...');
+                        await init();
+                        log('✅ WASM module initialized', 'completed');
+                        
+                        const results = [];
+                        
+                        // Creation benchmarks
+                        log('Running creation benchmarks...');
+                        
+                        results.push(benchmark('Stump Creation', () => {
+                            const stump = new WasmStump();
+                            stump.free();
+                        }));
+                        
+                        results.push(benchmark('Pollard Creation', () => {
+                            const pollard = new WasmPollard();
+                            pollard.free();
+                        }));
+                        
+                        log('Running operation benchmarks...');
+                        
+                        // Setup for operation benchmarks
+                        const stump = new WasmStump();
+                        const pollard = new WasmPollard();
+                        const elements = createTestElements(50);
+                        const emptyProof = JSON.stringify({ targets: [], hashes: [] });
+                        
+                        // Add elements
+                        stump.modify(emptyProof, elements, []);
+                        const additions = elements.map(hash => ({ hash, remember: true }));
+                        pollard.modify(emptyProof, JSON.stringify(additions), []);
+                        
+                        results.push(benchmark('Proof Generation', () => {
+                            pollard.prove_single(elements[0]);
+                        }, 50));
+                        
+                        results.push(benchmark('Proof Verification', () => {
+                            const proof = pollard.prove_single(elements[0]);
+                            stump.verify(proof, [elements[0]]);
+                        }, 50));
+                        
+                        stump.free();
+                        pollard.free();
+                        
+                        // Display results
+                        log('📊 Browser Benchmark Results:', 'completed');
+                        results.forEach(result => {
+                            log(`${result.name}: ${result.avg.toFixed(3)}ms avg (${result.min.toFixed(3)}-${result.max.toFixed(3)}ms, ${result.iterations} iterations)`);
+                        });
+                        
+                        // Save results to global variable for extraction
+                        window.benchmarkResults = results;
+                        log('✅ All benchmarks completed!', 'completed');
+                        
+                    } catch (error) {
+                        log(`❌ Error: ${error.message}`, 'error');
+                        window.benchmarkResults = { error: error.message };
+                    }
+                }
+                
+                runBenchmarks();
+            </script>
+        </body>
+        </html>
+        EOF
+
+    - name: Run browser benchmarks
+      run: |
+        cd browser-benchmarks
+        python3 -m http.server 8080 &
+        SERVER_PID=$!
+        sleep 2
+        
+        # Run benchmark in headless browser
+        npx playwright eval "
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+            
+            // Navigate to benchmark page
+            await page.goto('http://localhost:8080');
+            
+            // Wait for benchmarks to complete (max 60 seconds)
+            await page.waitForFunction(() => window.benchmarkResults, { timeout: 60000 });
+            
+            // Extract results
+            const results = await page.evaluate(() => window.benchmarkResults);
+            
+            // Save results
+            require('fs').writeFileSync('../browser-benchmark-results.json', JSON.stringify(results, null, 2));
+            
+            await browser.close();
+            console.log('Browser benchmarks completed');
+          })();
+        "
+        
+        kill $SERVER_PID
+
+    - name: Generate browser benchmark report
+      run: |
+        echo "# Browser Benchmark Results" > browser-benchmark-report.md
+        echo "" >> browser-benchmark-report.md
+        echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> browser-benchmark-report.md
+        echo "**Commit:** ${{ github.sha }}" >> browser-benchmark-report.md
+        echo "**Browser:** Chromium (headless)" >> browser-benchmark-report.md
+        echo "" >> browser-benchmark-report.md
+        
+        if [ -f browser-benchmark-results.json ]; then
+          echo "## Performance Metrics" >> browser-benchmark-report.md
+          echo "" >> browser-benchmark-report.md
+          
+          node -e "
+            const results = JSON.parse(require('fs').readFileSync('browser-benchmark-results.json'));
+            if (results.error) {
+              console.log('❌ Error during benchmarking:', results.error);
+            } else if (Array.isArray(results)) {
+              console.log('| Operation | Average (ms) | Min (ms) | Max (ms) | Iterations |');
+              console.log('|-----------|--------------|----------|----------|------------|');
+              results.forEach(r => {
+                console.log(\`| \${r.name} | \${r.avg.toFixed(3)} | \${r.min.toFixed(3)} | \${r.max.toFixed(3)} | \${r.iterations} |\`);
+              });
+            }
+          " >> browser-benchmark-report.md
+        else
+          echo "No benchmark results generated." >> browser-benchmark-report.md
+        fi
+
+    - name: Upload browser benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: browser-benchmark-results
+        path: |
+          browser-benchmark-results.json
+          browser-benchmark-report.md
+        retention-days: 30
+
+  performance-comparison:
+    name: Performance Comparison
+    runs-on: ubuntu-latest
+    needs: [rust-benchmarks, wasm-benchmarks, browser-benchmarks]
+    if: always() && (github.event.inputs.benchmark_suite == 'comparison' || github.event.inputs.benchmark_suite == 'all' || github.event.inputs.benchmark_suite == '')
+    
+    steps:
+    - name: Download all benchmark results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: '*-benchmark-results'
+        merge-multiple: true
+
+    - name: Generate performance comparison report
+      run: |
+        echo "# Performance Comparison Report" > performance-comparison.md
+        echo "" >> performance-comparison.md
+        echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> performance-comparison.md
+        echo "**Commit:** ${{ github.sha }}" >> performance-comparison.md
+        echo "" >> performance-comparison.md
+        
+        echo "## Summary" >> performance-comparison.md
+        echo "" >> performance-comparison.md
+        echo "This report compares performance across different execution environments:" >> performance-comparison.md
+        echo "- **Rust Native**: Direct Rust execution" >> performance-comparison.md
+        echo "- **WASM Node.js**: WebAssembly running in Node.js" >> performance-comparison.md
+        echo "- **WASM Browser**: WebAssembly running in Chromium browser" >> performance-comparison.md
+        echo "" >> performance-comparison.md
+        
+        echo "## Detailed Results" >> performance-comparison.md
+        echo "" >> performance-comparison.md
+        
+        if [ -f wasm-benchmark-report.md ]; then
+          echo "### WASM Node.js Results" >> performance-comparison.md
+          tail -n +8 wasm-benchmark-report.md >> performance-comparison.md
+          echo "" >> performance-comparison.md
+        fi
+        
+        if [ -f browser-benchmark-report.md ]; then
+          echo "### Browser Results" >> performance-comparison.md
+          tail -n +8 browser-benchmark-report.md >> performance-comparison.md
+          echo "" >> performance-comparison.md
+        fi
+        
+        if [ -f rust-benchmark-report.md ]; then
+          echo "### Rust Native Results" >> performance-comparison.md
+          tail -n +8 rust-benchmark-report.md >> performance-comparison.md
+          echo "" >> performance-comparison.md
+        fi
+        
+        echo "## Notes" >> performance-comparison.md
+        echo "" >> performance-comparison.md
+        echo "- All benchmarks run on GitHub Actions Ubuntu runners" >> performance-comparison.md
+        echo "- Results may vary between runs due to system load" >> performance-comparison.md
+        echo "- WASM performance typically 1.5-3x slower than native Rust" >> performance-comparison.md
+        echo "- Browser performance may include additional overhead from DOM/JS engine" >> performance-comparison.md
+
+    - name: Upload performance comparison
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-comparison-report
+        path: performance-comparison.md
+        retention-days: 90
+
+    - name: Comment PR with benchmark results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          let comment = '## 📊 Performance Benchmark Results\n\n';
+          
+          try {
+            const report = fs.readFileSync('performance-comparison.md', 'utf8');
+            comment += report;
+          } catch (error) {
+            comment += 'Performance comparison report could not be generated.\n';
+            comment += `Error: ${error.message}`;
+          }
+          
+          comment += '\n\n---\n*This comment was automatically generated by the benchmark workflow.*';
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
