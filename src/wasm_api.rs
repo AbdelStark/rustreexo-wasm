@@ -5,6 +5,7 @@ use rustreexo::accumulator::{
     stump::Stump,
 };
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
@@ -23,13 +24,19 @@ impl UtreexoError {
     }
 
     #[wasm_bindgen(js_name = toString)]
-    pub fn to_string(&self) -> String {
+    pub fn to_string_js(&self) -> String {
         self.message.clone()
     }
 
     #[wasm_bindgen(js_name = valueOf)]
     pub fn value_of(&self) -> String {
         self.message.clone()
+    }
+}
+
+impl fmt::Display for UtreexoError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
     }
 }
 
@@ -98,6 +105,12 @@ impl Hash {
 #[wasm_bindgen]
 pub struct WasmStump {
     inner: Stump,
+}
+
+impl Default for WasmStump {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[wasm_bindgen]
@@ -210,6 +223,12 @@ impl WasmStump {
 #[wasm_bindgen]
 pub struct WasmPollard {
     inner: Pollard<BitcoinNodeHash>,
+}
+
+impl Default for WasmPollard {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[wasm_bindgen]

@@ -22,7 +22,7 @@ macro_rules! console_log {
 pub fn wasm_main() {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
-    
+
     console_log!("Rustreexo WASM module initialized");
 }
 

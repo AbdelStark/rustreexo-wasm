@@ -13,6 +13,7 @@ jobs:
   build-wasm:
     name: Build WASM Packages
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -149,6 +150,7 @@ jobs:
   test-artifacts:
     name: Test Built Artifacts
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     needs: build-wasm
     strategy:
       matrix:
