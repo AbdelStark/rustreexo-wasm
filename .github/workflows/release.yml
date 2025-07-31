@@ -161,18 +161,46 @@ jobs:
 
     - name: Update package.json metadata
       run: |
-        cd pkg-${{ matrix.target }}
+        # Determine the correct directory name
+        if [ "${{ matrix.target }}" = "nodejs" ]; then
+          PKG_DIR="pkg-node"
+        else
+          PKG_DIR="pkg-${{ matrix.target }}"
+        fi
+        
+        cd ${PKG_DIR}
         
         # Update version in package.json
         npm version ${{ needs.prepare-release.outputs.version }} --no-git-tag-version
         
-        # Add additional metadata
-        jq '.repository = {
-          "type": "git",
-          "url": "git+https://github.com/${{ github.repository }}.git"
-        } | .bugs = {
-          "url": "https://github.com/${{ github.repository }}/issues"
-        } | .homepage = "https://github.com/${{ github.repository }}#readme"' package.json > temp.json
+        # Set the correct scoped package name
+        case "${{ matrix.target }}" in
+          "web")
+            PACKAGE_NAME="@rustreexo/rustreexo-wasm-web"
+            ;;
+          "nodejs")
+            PACKAGE_NAME="@rustreexo/rustreexo-wasm-nodejs"
+            ;;
+          "bundler")
+            PACKAGE_NAME="@rustreexo/rustreexo-wasm-bundler"
+            ;;
+        esac
+        
+        # Update package.json with scoped name and metadata
+        jq --arg name "$PACKAGE_NAME" '. + {
+          "name": $name,
+          "repository": {
+            "type": "git",
+            "url": "git+https://github.com/${{ github.repository }}.git"
+          },
+          "bugs": {
+            "url": "https://github.com/${{ github.repository }}/issues"
+          },
+          "homepage": "https://github.com/${{ github.repository }}#readme",
+          "keywords": ["utreexo", "accumulator", "bitcoin", "wasm", "cryptography", "rust"],
+          "author": "AbdelStark",
+          "license": "MIT"
+        }' package.json > temp.json
         
         mv temp.json package.json
         
@@ -181,14 +209,28 @@ jobs:
 
     - name: Publish to NPM (dry run)
       run: |
-        cd pkg-${{ matrix.target }}
+        # Determine the correct directory name
+        if [ "${{ matrix.target }}" = "nodejs" ]; then
+          PKG_DIR="pkg-node"
+        else
+          PKG_DIR="pkg-${{ matrix.target }}"
+        fi
+        
+        cd ${PKG_DIR}
         npm publish --dry-run
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
     - name: Publish to NPM
       run: |
-        cd pkg-${{ matrix.target }}
+        # Determine the correct directory name
+        if [ "${{ matrix.target }}" = "nodejs" ]; then
+          PKG_DIR="pkg-node"
+        else
+          PKG_DIR="pkg-${{ matrix.target }}"
+        fi
+        
+        cd ${PKG_DIR}
         
         # Determine NPM tag
         NPM_TAG="latest"
