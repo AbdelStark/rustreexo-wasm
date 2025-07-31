@@ -65,12 +65,6 @@ jobs:
           --out-dir pkg-bundler \
           --release
 
-    - name: Build WASM for no-modules target
-      run: |
-        wasm-pack build \
-          --target no-modules \
-          --out-dir pkg-no-modules \
-          --release
 
     - name: Update package names for NPM publishing
       run: |
@@ -78,10 +72,9 @@ jobs:
         jq '.name = "@rustreexo/rustreexo-wasm-web"' pkg-web/package.json > pkg-web/package.json.tmp && mv pkg-web/package.json.tmp pkg-web/package.json
         jq '.name = "@rustreexo/rustreexo-wasm-nodejs"' pkg-node/package.json > pkg-node/package.json.tmp && mv pkg-node/package.json.tmp pkg-node/package.json  
         jq '.name = "@rustreexo/rustreexo-wasm-bundler"' pkg-bundler/package.json > pkg-bundler/package.json.tmp && mv pkg-bundler/package.json.tmp pkg-bundler/package.json
-        jq '.name = "@rustreexo/rustreexo-wasm-no-modules"' pkg-no-modules/package.json > pkg-no-modules/package.json.tmp && mv pkg-no-modules/package.json.tmp pkg-no-modules/package.json
         
         # Add repository and other metadata to all packages
-        for pkg_dir in pkg-web pkg-node pkg-bundler pkg-no-modules; do
+        for pkg_dir in pkg-web pkg-node pkg-bundler; do
           jq '. + {
             "repository": {
               "type": "git", 
@@ -112,7 +105,7 @@ jobs:
         echo "| Target | WASM Size | JS Size |" >> PACKAGE_INFO.md
         echo "|--------|-----------|---------|" >> PACKAGE_INFO.md
         
-        for target in web node bundler no-modules; do
+        for target in web node bundler; do
           wasm_size=$(ls -lh pkg-${target}/*.wasm | awk '{print $5}')
           js_size=$(ls -lh pkg-${target}/*.js | awk '{print $5}')
           echo "| ${target} | ${wasm_size} | ${js_size} |" >> PACKAGE_INFO.md
@@ -152,14 +145,6 @@ jobs:
           PACKAGE_INFO.md
         retention-days: 90
 
-    - name: Upload no-modules package
-      uses: actions/upload-artifact@v4
-      with:
-        name: rustreexo-wasm-no-modules-${{ steps.version.outputs.version }}
-        path: |
-          pkg-no-modules/
-          PACKAGE_INFO.md
-        retention-days: 90
 
     - name: Upload all packages (combined)
       uses: actions/upload-artifact@v4

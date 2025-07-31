@@ -92,16 +92,13 @@ jobs:
         
         # Build for bundlers
         wasm-pack build --target bundler --out-dir pkg-bundler --release
-        
-        # Build for no-modules
-        wasm-pack build --target no-modules --out-dir pkg-no-modules --release
 
     - name: Create release archives
       run: |
         mkdir -p release-packages
         
         # Create tar.gz archives for each target
-        for target in web nodejs bundler no-modules; do
+        for target in web nodejs bundler; do
           tar -czf "release-packages/rustreexo-wasm-${target}-${{ needs.prepare-release.outputs.version }}.tar.gz" \
             -C "pkg-${target}" .
         done

@@ -163,6 +163,16 @@ jobs:
         echo "Checking HTML file exists and has correct imports"
         grep -q "rustreexo_wasm.js" examples/browser_example.html
 
+    - name: Install TypeScript test dependencies
+      run: |
+        cd tests/typescript
+        npm install
+
+    - name: Run TypeScript reference tests
+      run: |
+        cd tests/typescript
+        npm test
+
   docs:
     name: Build Documentation
     runs-on: ubuntu-latest
