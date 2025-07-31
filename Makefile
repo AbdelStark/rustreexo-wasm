@@ -1,6 +1,6 @@
 # Rustreexo WASM Makefile
 
-.PHONY: all build build-web build-node build-bundler test clean help examples
+.PHONY: all build build-web build-node build-bundler test clean clean-all help examples test-reference test-reference-all test-coverage
 
 # Default target
 all: build test
@@ -44,8 +44,23 @@ test-node:
 	@echo "🧪 Running WASM tests in Node.js..."
 	wasm-pack test --node
 
+# Run TypeScript reference tests
+test-reference: build-node
+	@echo "🧪 Running TypeScript reference tests..."
+	cd tests/typescript && npm install && npm run test:reference
+
+# Run all TypeScript test suites
+test-reference-all: build-node
+	@echo "🧪 Running all TypeScript test suites..."
+	cd tests/typescript && npm install && npm run test:all
+
+# Run TypeScript tests with coverage
+test-coverage: build-node
+	@echo "📊 Running TypeScript tests with coverage..."
+	cd tests/typescript && npm install && npm run test:coverage
+
 # Run all tests
-test-all: test test-browser test-node
+test-all: test test-browser test-node test-reference
 	@echo "✅ All tests completed!"
 
 # Clean build artifacts
@@ -53,6 +68,12 @@ clean:
 	@echo "🧹 Cleaning build artifacts..."
 	rm -rf pkg pkg-node pkg-bundler pkg-dev target/
 	cargo clean
+
+# Clean all artifacts including dependencies
+clean-all: clean
+	@echo "🧹 Cleaning all artifacts and dependencies..."
+	rm -rf examples/node_modules examples/package-lock.json
+	rm -rf tests/typescript/node_modules tests/typescript/package-lock.json
 
 # Install dependencies and tools
 install:
@@ -127,7 +148,10 @@ help:
 	@echo "  test           - Run Rust tests"
 	@echo "  test-browser   - Run WASM tests in browser"
 	@echo "  test-node      - Run WASM tests in Node.js"
-	@echo "  test-all       - Run all tests"
+	@echo "  test-reference - Run TypeScript reference tests"
+	@echo "  test-reference-all - Run all TypeScript test suites"
+	@echo "  test-coverage  - Run TypeScript tests with coverage"
+	@echo "  test-all       - Run all tests (Rust + WASM + TypeScript)"
 	@echo ""
 	@echo "  examples       - Set up examples"
 	@echo "  example-basic  - Run basic Node.js example"
@@ -137,6 +161,7 @@ help:
 	@echo "  clippy         - Run lints"
 	@echo "  docs           - Generate documentation"
 	@echo "  clean          - Clean build artifacts"
+	@echo "  clean-all      - Clean all artifacts and dependencies"
 	@echo "  install        - Install dependencies"
 	@echo "  size           - Check package size"
 	@echo "  benchmark      - Run performance benchmarks"

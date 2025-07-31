@@ -9,6 +9,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:nodejs": "vitest run src/utreexo-nodejs.test.ts",
+    "test:reference": "vitest run src/utreexo-nodejs.test.ts --reporter=verbose",
+    "test:comprehensive": "vitest run src/utreexo-comprehensive.test.ts",
+    "test:legacy": "vitest run src/utreexo-reference.test.ts",
     "build": "tsc",
     "lint": "eslint . --ext .ts,.js",
     "format": "prettier --write ."
