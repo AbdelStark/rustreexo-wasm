@@ -26,7 +26,5 @@ pub fn wasm_main() {
     console_log!("Rustreexo WASM module initialized");
 }
 
-mod wasm_api;
-
-// Re-export public API
+pub mod wasm_api;
 pub use wasm_api::*;
