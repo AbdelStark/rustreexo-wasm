@@ -183,8 +183,15 @@ jobs:
       run: |
         cd examples
         npm ci
+        # Map target names to actual directory names
+        if [ "${{ matrix.target }}" = "nodejs" ]; then
+          PKG_DIR="pkg-node"
+        else
+          PKG_DIR="pkg-${{ matrix.target }}"
+        fi
+        
         node -e "
-          const pkg = require('../pkg-${{ matrix.target }}/rustreexo_wasm.js');
+          const pkg = require('../${PKG_DIR}/rustreexo_wasm.js');
           console.log('✅ Package loaded successfully');
           const stump = new pkg.WasmStump();
           console.log('✅ WasmStump created successfully');
@@ -195,19 +202,26 @@ jobs:
 
     - name: Verify package contents
       run: |
-        echo "📦 Verifying ${{ matrix.target }} package contents:"
-        ls -la pkg-${{ matrix.target }}/
+        # Map target names to actual directory names
+        if [ "${{ matrix.target }}" = "nodejs" ]; then
+          PKG_DIR="pkg-node"
+        else
+          PKG_DIR="pkg-${{ matrix.target }}"
+        fi
+        
+        echo "📦 Verifying ${{ matrix.target }} package contents in ${PKG_DIR}/:"
+        ls -la ${PKG_DIR}/
         
         # Check required files exist
-        test -f "pkg-${{ matrix.target }}/rustreexo_wasm.js" || exit 1
-        test -f "pkg-${{ matrix.target }}/rustreexo_wasm_bg.wasm" || exit 1
-        test -f "pkg-${{ matrix.target }}/package.json" || exit 1
+        test -f "${PKG_DIR}/rustreexo_wasm.js" || exit 1
+        test -f "${PKG_DIR}/rustreexo_wasm_bg.wasm" || exit 1
+        test -f "${PKG_DIR}/package.json" || exit 1
         
         echo "✅ All required files present"
         
         # Check WASM file is not corrupted
-        file pkg-${{ matrix.target }}/rustreexo_wasm_bg.wasm
+        file ${PKG_DIR}/rustreexo_wasm_bg.wasm
         
         # Verify package.json is valid JSON
-        cat pkg-${{ matrix.target }}/package.json | jq . > /dev/null
+        cat ${PKG_DIR}/package.json | jq . > /dev/null
         echo "✅ package.json is valid JSON"
