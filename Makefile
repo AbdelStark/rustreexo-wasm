@@ -72,13 +72,13 @@ examples:
 # Run basic Node.js example
 example-basic: build-node
 	@echo "🚀 Running basic Node.js example..."
-	cd examples && node nodejs_example.js
+	cd examples && node nodejs_example.cjs
 
 # Serve browser example
 example-browser: build-web
 	@echo "🌐 Starting web server for browser example..."
-	@echo "Open http://localhost:8000/browser_example.html in your browser"
-	cd examples && python -m http.server 8000 || npx serve . -p 8000
+	@echo "Open http://localhost:8000/examples/browser_example.html in your browser"
+	python -m http.server 8000 || npx serve . -p 8000
 
 # Check code formatting
 fmt:

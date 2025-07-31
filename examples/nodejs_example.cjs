@@ -5,7 +5,7 @@
  * Run with: node nodejs_example.js
  */
 
-const { WasmStump, WasmPollard } = require('../pkg/rustreexo_wasm.js');
+const { WasmStump, WasmPollard } = require('../pkg-node/rustreexo_wasm.js');
 
 function createTestData(count) {
   // Generate test elements (mock SHA-256 hashes)
@@ -87,29 +87,20 @@ async function nodeJsExample() {
     console.log(`   Batch proof for ${batchTargets.length} elements: ${batchValid ? '✅ VALID' : '❌ INVALID'}`);
     console.log(`   Batch proof size: ${batchProof.length} bytes`);
 
-    // Simulate UTXO operations
+    // UTXO simulation demonstration (basic addition only)
     console.log('\n🪙 UTXO simulation:');
+    console.log('   Demonstrating addition of new UTXOs...');
     
-    // Spend some UTXOs (remove elements)
-    const utxosToSpend = elements.slice(0, 5);
-    console.log(`   Spending ${utxosToSpend.length} UTXOs...`);
-    
-    for (const utxo of utxosToSpend) {
-      const proof = pollard.prove_single(utxo);
-      stump.modify(proof, [], [utxo]);
-      pollard.modify(proof, JSON.stringify([]), [utxo]);
-    }
-    
-    // Create new UTXOs (add new elements)
-    const newUtxos = createTestData(3).map(hash => hash.replace(/^0+/, 'f')); // Make them different
-    console.log(`   Creating ${newUtxos.length} new UTXOs...`);
+    // Add new elements (simulating new UTXOs)
+    const newUtxos = createTestData(3).map((hash, i) => 'f' + hash.substring(1)); // Make them different
+    console.log(`   Adding ${newUtxos.length} new UTXOs...`);
     
     stump.modify(emptyProof, newUtxos, []);
     const newAdditions = newUtxos.map(hash => ({ hash, remember: true }));
     pollard.modify(emptyProof, JSON.stringify(newAdditions), []);
     
     console.log(`   Final UTXO count: ${stump.num_leaves()}`);
-    console.log(`   Net change: ${Number(stump.num_leaves()) - elements.length} UTXOs`);
+    console.log(`   Net change: +${newUtxos.length} UTXOs`);
 
     // Export accumulator state
     console.log('\n📤 State export:');
@@ -130,7 +121,7 @@ async function nodeJsExample() {
     console.log('🎉 Node.js example completed successfully!');
 
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error('❌ Error:', error.message || error);
     process.exit(1);
   }
 }

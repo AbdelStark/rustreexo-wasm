@@ -4,8 +4,8 @@
   "description": "Usage examples for Rustreexo WASM bindings",
   "type": "module",
   "scripts": {
-    "basic": "node basic_usage.js",
-    "nodejs": "node nodejs_example.js",
+    "basic": "node basic_usage.cjs",
+    "nodejs": "node nodejs_example.cjs",
     "browser": "python -m http.server 8000",
     "serve": "npx serve . -p 8000"
   },

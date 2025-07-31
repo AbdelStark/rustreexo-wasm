@@ -9,14 +9,13 @@
  * - Basic accumulator operations
  */
 
-import init, { WasmStump, WasmPollard } from '../pkg/rustreexo_wasm.js';
+const { WasmStump, WasmPollard } = require('../pkg-node/rustreexo_wasm.js');
 
 async function basicUsageExample() {
   console.log('🚀 Rustreexo WASM Basic Usage Example\n');
 
-  // Initialize the WASM module
-  await init();
-  console.log('✅ WASM module initialized');
+  // Node.js target doesn't require initialization
+  console.log('✅ WASM module ready');
 
   // Create accumulators
   const stump = new WasmStump();   // Lightweight accumulator
