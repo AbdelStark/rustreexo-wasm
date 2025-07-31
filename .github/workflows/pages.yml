@@ -260,6 +260,9 @@ jobs:
         # Copy and modify the browser example as the main demo
         cp examples/browser_example.html site/browser-demo.html
         
+        # Fix import paths in browser demo (change ../pkg/ to ./pkg/)
+        sed -i 's|../pkg/rustreexo_wasm.js|./pkg/rustreexo_wasm.js|g' site/browser-demo.html
+        
         # Create a performance-focused demo
         cat > site/performance-demo.html << 'EOF'
         <!DOCTYPE html>
