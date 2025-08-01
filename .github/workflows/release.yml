@@ -17,6 +17,7 @@ env:
 permissions:
   contents: write
   packages: write
+  issues: write
 
 jobs:
   prepare-release:
@@ -338,38 +339,46 @@ jobs:
 
     - name: Create post-release issue
       uses: actions/github-script@v7
+      continue-on-error: true
       with:
         script: |
-          const { data: release } = await github.rest.repos.getReleaseByTag({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            tag: '${{ needs.prepare-release.outputs.tag }}'
-          });
-          
-          const issueBody = `
-          🎉 Release ${{ needs.prepare-release.outputs.tag }} has been published!
-          
-          **Release URL:** ${release.html_url}
-          **NPM Packages:** 
-          - [@rustreexo/rustreexo-wasm-web](https://www.npmjs.com/package/@rustreexo/rustreexo-wasm-web)
-          - [@rustreexo/rustreexo-wasm-nodejs](https://www.npmjs.com/package/@rustreexo/rustreexo-wasm-nodejs)  
-          - [@rustreexo/rustreexo-wasm-bundler](https://www.npmjs.com/package/@rustreexo/rustreexo-wasm-bundler)
-          
-          ## Post-Release Checklist
-          
-          - [ ] Verify NPM packages are accessible
-          - [ ] Update documentation with new version
-          - [ ] Announce release on social media/forums
-          - [ ] Update dependent projects
-          - [ ] Monitor for any issues
-          
-          /cc @${{ github.actor }}
-          `;
-          
-          await github.rest.issues.create({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            title: `Post-Release Tasks for ${{ needs.prepare-release.outputs.tag }}`,
-            body: issueBody,
-            labels: ['release', 'task']
-          });
+          try {
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: '${{ needs.prepare-release.outputs.tag }}'
+            });
+            
+            const issueBody = `
+            🎉 Release ${{ needs.prepare-release.outputs.tag }} has been published!
+            
+            **Release URL:** ${release.html_url}
+            **NPM Packages:** 
+            - [@rustreexo/rustreexo-wasm-web](https://www.npmjs.com/package/@rustreexo/rustreexo-wasm-web)
+            - [@rustreexo/rustreexo-wasm-nodejs](https://www.npmjs.com/package/@rustreexo/rustreexo-wasm-nodejs)  
+            - [@rustreexo/rustreexo-wasm-bundler](https://www.npmjs.com/package/@rustreexo/rustreexo-wasm-bundler)
+            
+            ## Post-Release Checklist
+            
+            - [ ] Verify NPM packages are accessible
+            - [ ] Update documentation with new version
+            - [ ] Announce release on social media/forums
+            - [ ] Update dependent projects
+            - [ ] Monitor for any issues
+            
+            /cc @${{ github.actor }}
+            `;
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Post-Release Tasks for ${{ needs.prepare-release.outputs.tag }}`,
+              body: issueBody,
+              labels: ['release', 'task']
+            });
+            
+            console.log('✅ Post-release issue created successfully');
+          } catch (error) {
+            console.log('⚠️ Failed to create post-release issue:', error.message);
+            console.log('This is not critical for the release process.');
+          }
