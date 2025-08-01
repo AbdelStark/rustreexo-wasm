@@ -1,6 +1,6 @@
 # Rustreexo WASM Makefile
 
-.PHONY: all build build-web build-node build-bundler test clean clean-all help examples test-reference test-reference-all test-coverage
+.PHONY: all build build-web build-node build-bundler test clean clean-all help examples test-reference test-reference-all test-coverage benchmark-node
 
 # Default target
 all: build test
@@ -58,6 +58,11 @@ test-reference-all: build-node
 test-coverage: build-node
 	@echo "📊 Running TypeScript tests with coverage..."
 	cd tests/typescript && npm install && npm run test:coverage
+
+# Run Node.js performance benchmark
+benchmark-node: build-node
+	@echo "⚡ Running Node.js performance benchmark..."
+	cd tests/typescript && npm install && npm run benchmark
 
 # Run all tests
 test-all: test test-browser test-node test-reference
@@ -152,6 +157,8 @@ help:
 	@echo "  test-reference-all - Run all TypeScript test suites"
 	@echo "  test-coverage  - Run TypeScript tests with coverage"
 	@echo "  test-all       - Run all tests (Rust + WASM + TypeScript)"
+	@echo ""
+	@echo "  benchmark-node - Run Node.js performance benchmark"
 	@echo ""
 	@echo "  examples       - Set up examples"
 	@echo "  example-basic  - Run basic Node.js example"

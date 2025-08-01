@@ -1,7 +1,9 @@
 # Rustreexo WASM
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![CI](https://github.com/AbdelStark/rustreexo-wasm/workflows/CI/badge.svg)](https://github.com/AbdelStark/rustreexo-wasm/actions/workflows/ci.yml)
+[![TypeScript Tests](https://github.com/AbdelStark/rustreexo-wasm/workflows/TypeScript%20Reference%20Tests/badge.svg)](https://github.com/AbdelStark/rustreexo-wasm/actions/workflows/typescript-tests.yml)
+[![Performance Benchmark](https://github.com/AbdelStark/rustreexo-wasm/workflows/Performance%20Benchmark/badge.svg)](https://github.com/AbdelStark/rustreexo-wasm/actions/workflows/benchmark.yml)
 
 WebAssembly (WASM) bindings for the [Rustreexo](https://github.com/mit-dci/rustreexo) Utreexo accumulator implementation. This package provides high-performance, cryptographically secure Utreexo accumulators that can run in web browsers and Node.js environments.
 
@@ -144,37 +146,6 @@ Proofs are JSON strings with the following structure:
 
 - **`targets`**: Array of leaf positions being proven
 - **`hashes`**: Array of hash strings needed for the proof path
-
-## Hash Functions
-
-The implementation uses Bitcoin-compatible hash functions:
-
-- **SHA-256**: For leaf hash computation (`hash_from_u8` equivalent)
-- **SHA-512/256**: For internal node hashing (`parent_hash` equivalent)
-
-All hashes are represented as lowercase hexadecimal strings (64 characters for 256-bit hashes).
-
-## Error Handling
-
-WASM functions return JavaScript-friendly error messages:
-
-```javascript
-try {
-  stump.modify(invalidProof, [], []);
-} catch (error) {
-  console.error("Modification failed:", error);
-}
-```
-
-## Performance
-
-WebAssembly provides near-native performance:
-
-- **Proof Generation**: ~1ms for small accumulators
-- **Proof Verification**: ~0.1ms per proof
-- **Accumulator Updates**: ~0.5ms for single element operations
-
-*Benchmarks measured on modern browsers with typical accumulator sizes.*
 
 ## Development
 

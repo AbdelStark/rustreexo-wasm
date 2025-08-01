@@ -118,6 +118,9 @@
 </head>
 <body>
     <h1>🦀 Rustreexo WASM Browser Demo</h1>
+    <div style="text-align: center; margin-bottom: 20px; color: #f39c12;">
+        🔐 <strong>Enhanced with Real Cryptographic Hashing</strong> 🔐
+    </div>
     
     <div class="container">
         <h2>Accumulator Status</h2>
@@ -159,6 +162,9 @@
         <div class="output" id="output"></div>
     </div>
 
+    <!-- Include CryptoJS for real cryptographic hashing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    
     <script type="module">
         let wasmModule = null;
         let stump = null;
@@ -187,11 +193,52 @@
             document.getElementById('proofs-verified').textContent = stats.proofsVerified;
         }
 
+        // Real cryptographic hash functions matching the reference tests
+        function hashFromU8(preimage) {
+            // Ensure the input is a valid u8 value (0-255)
+            if (preimage < 0 || preimage > 255 || !Number.isInteger(preimage)) {
+                throw new Error(`Invalid u8 value: ${preimage}. Must be an integer between 0-255.`);
+            }
+
+            // Create a single-byte array with the preimage value
+            const singleByteArray = new Uint8Array([preimage]);
+            
+            // Compute SHA-256 hash using CryptoJS to match WASM implementation
+            const wordArray = CryptoJS.lib.WordArray.create(Array.from(singleByteArray));
+            const sha256Hash = CryptoJS.SHA256(wordArray).toString(CryptoJS.enc.Hex);
+            
+            return sha256Hash;
+        }
+
+        function parentHash(left, right) {
+            // Validate hex strings
+            if (!/^[0-9a-fA-F]{64}$/.test(left) || !/^[0-9a-fA-F]{64}$/.test(right)) {
+                throw new Error('Invalid hash format: must be 64-character hex strings');
+            }
+
+            // Convert hex strings to binary arrays
+            const leftBytes = [];
+            const rightBytes = [];
+            
+            for (let i = 0; i < left.length; i += 2) {
+                leftBytes.push(parseInt(left.substr(i, 2), 16));
+                rightBytes.push(parseInt(right.substr(i, 2), 16));
+            }
+            
+            // Concatenate the two hashes
+            const combined = new Uint8Array([...leftBytes, ...rightBytes]);
+            
+            // Compute SHA-512/256 hash using CryptoJS (approximated as SHA512 truncated)
+            const wordArray = CryptoJS.lib.WordArray.create(Array.from(combined));
+            const sha512Hash = CryptoJS.SHA512(wordArray).toString(CryptoJS.enc.Hex);
+            
+            // Truncate to 256 bits (64 hex characters) to simulate SHA-512/256
+            return sha512Hash.substring(0, 64);
+        }
+
         function generateTestHash(index) {
-            // Generate deterministic test hashes for demo
-            const hash = new Array(64).fill('0');
-            const hexIndex = index.toString(16).padStart(8, '0');
-            return hash.slice(0, -8).join('') + hexIndex;
+            // Generate real cryptographic hashes using the same method as reference tests
+            return hashFromU8(index % 256);
         }
 
         // Main functions
@@ -199,8 +246,8 @@
             try {
                 log('🚀 Initializing Rustreexo WASM module...', 'info');
                 
-                // Import the WASM module
-                const wasmModule = await import('../pkg/rustreexo_wasm.js');
+                // Import the WASM module (update path based on your build target)
+                wasmModule = await import('../pkg/rustreexo_wasm.js');
                 await wasmModule.default(); // Initialize
                 
                 // Create accumulators
@@ -209,6 +256,7 @@
                 
                 log('✅ WASM module initialized successfully!', 'success');
                 log('✅ Created Stump and Pollard accumulators', 'success');
+                log('🔐 Using real SHA-256 cryptographic hashing', 'info');
                 
                 // Enable buttons
                 document.getElementById('init-btn').disabled = true;
@@ -236,24 +284,54 @@
                 const startIndex = elements.length;
                 
                 for (let i = 0; i < count; i++) {
-                    newElements.push(generateTestHash(startIndex + i));
+                    const hash = generateTestHash(startIndex + i);
+                    newElements.push(hash);
+                    if (i < 3) { // Show first few hashes for verification
+                        log(`   Hash(${startIndex + i}): ${hash}`, 'info');
+                    }
+                }
+                if (count > 3) {
+                    log(`   ... and ${count - 3} more hashes`, 'info');
                 }
                 
                 const emptyProof = JSON.stringify({ targets: [], hashes: [] });
                 
-                // Add to Stump
-                stump.modify(emptyProof, newElements, []);
+                // Create WASM Hash objects for real hashes
+                const wasmHashes = newElements.map(hash => new wasmModule.Hash(hash));
                 
-                // Add to Pollard
-                const additions = newElements.map(hash => ({ hash, remember: true }));
-                pollard.modify(emptyProof, JSON.stringify(additions), []);
-                
-                elements.push(...newElements);
-                
-                log(`✅ Added ${count} elements successfully`, 'success');
-                log(`   Total elements: ${elements.length}`, 'info');
-                log(`   Accumulator leaves: ${stump.num_leaves()}`, 'info');
-                log(`   Root hashes: ${stump.roots().length}`, 'info');
+                try {
+                    // Add to Stump using WASM Hash objects
+                    stump.modify(emptyProof, wasmHashes, []);
+                    
+                    // Add to Pollard using WASM Hash objects
+                    const additions = wasmHashes.map(wasmHash => ({ hash: wasmHash, remember: true }));
+                    pollard.modify(emptyProof, JSON.stringify(additions), []);
+                    
+                    elements.push(...newElements);
+                    
+                    log(`✅ Added ${count} elements with real cryptographic hashes`, 'success');
+                    log(`   Total elements: ${elements.length}`, 'info');
+                    log(`   Accumulator leaves: ${stump.num_leaves()}`, 'info');
+                    log(`   Root hashes: ${stump.roots().length}`, 'info');
+                    
+                    // Clean up WASM objects
+                    wasmHashes.forEach(wasmHash => wasmHash.free());
+                    
+                } catch (error) {
+                    log(`⚠️  WASM modify API differs, using string hashes as fallback`, 'warning');
+                    
+                    // Fallback to string-based API
+                    stump.modify(emptyProof, newElements, []);
+                    const additions = newElements.map(hash => ({ hash, remember: true }));
+                    pollard.modify(emptyProof, JSON.stringify(additions), []);
+                    
+                    elements.push(...newElements);
+                    
+                    log(`✅ Added ${count} elements successfully (fallback mode)`, 'success');
+                    log(`   Total elements: ${elements.length}`, 'info');
+                    log(`   Accumulator leaves: ${stump.num_leaves()}`, 'info');
+                    log(`   Root hashes: ${stump.roots().length}`, 'info');
+                }
                 
                 // Enable proof buttons
                 document.getElementById('proof-btn').disabled = false;
@@ -341,7 +419,6 @@
                 if (stump) stump.free();
                 if (pollard) pollard.free();
                 
-                const wasmModule = await import('../pkg/rustreexo_wasm.js');
                 stump = new wasmModule.WasmStump();
                 pollard = new wasmModule.WasmPollard();
                 elements = [];
@@ -415,6 +492,7 @@
 
         // Initial log
         log('👋 Welcome to Rustreexo WASM Browser Demo!', 'info');
+        log('🔐 Now featuring real SHA-256 cryptographic hashing', 'success');
         log('Click "Initialize WASM" to get started.', 'info');
     </script>
 </body>
