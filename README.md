@@ -23,6 +23,33 @@ Utreexo is a dynamic hash-based accumulator designed for Bitcoin's UTXO set. It 
 - 📦 **Type Safe**: Full TypeScript definitions included
 - 🔧 **Easy Integration**: Simple JavaScript/TypeScript API
 
+## 📦 JavaScript/TypeScript Usage
+
+Ready-to-use packages are available on NPM for different environments:
+
+| Package | Environment | Installation |
+|---------|-------------|--------------|
+| [@rustreexo/rustreexo-wasm-web](https://www.npmjs.com/package/@rustreexo/rustreexo-wasm-web) | Web browsers (ES modules) | `npm install @rustreexo/rustreexo-wasm-web` |
+| [@rustreexo/rustreexo-wasm-nodejs](https://www.npmjs.com/package/@rustreexo/rustreexo-wasm-nodejs) | Node.js applications | `npm install @rustreexo/rustreexo-wasm-nodejs` |
+| [@rustreexo/rustreexo-wasm-bundler](https://www.npmjs.com/package/@rustreexo/rustreexo-wasm-bundler) | Webpack/Rollup/Vite | `npm install @rustreexo/rustreexo-wasm-bundler` |
+
+### Quick Start
+
+```javascript
+// Browser
+import init, { WasmStump, WasmPollard } from '@rustreexo/rustreexo-wasm-web';
+await init();
+
+// Node.js
+const { WasmStump, WasmPollard } = require('@rustreexo/rustreexo-wasm-nodejs');
+
+// Create accumulators
+const stump = new WasmStump();
+const pollard = new WasmPollard();
+```
+
+📚 **[See complete usage guide with examples →](./USAGE.md)**
+
 ## Installation
 
 ### Prerequisites
