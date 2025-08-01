@@ -102,15 +102,17 @@ jobs:
       run: |
         mkdir -p release-packages
         
-        # Create tar.gz archives for each target
-        for target in web nodejs bundler; do
-          tar -czf "release-packages/rustreexo-wasm-${target}-${{ needs.prepare-release.outputs.version }}.tar.gz" \
-            -C "pkg-${target}" .
-        done
+        # Create tar.gz archives for each target (note: nodejs target creates pkg-node directory)
+        tar -czf "release-packages/rustreexo-wasm-web-${{ needs.prepare-release.outputs.version }}.tar.gz" \
+          -C "pkg-web" .
+        tar -czf "release-packages/rustreexo-wasm-nodejs-${{ needs.prepare-release.outputs.version }}.tar.gz" \
+          -C "pkg-node" .
+        tar -czf "release-packages/rustreexo-wasm-bundler-${{ needs.prepare-release.outputs.version }}.tar.gz" \
+          -C "pkg-bundler" .
         
         # Create a combined archive
         tar -czf "release-packages/rustreexo-wasm-all-targets-${{ needs.prepare-release.outputs.version }}.tar.gz" \
-          pkg-*/
+          pkg-web/ pkg-node/ pkg-bundler/
 
     - name: Generate checksums
       run: |
