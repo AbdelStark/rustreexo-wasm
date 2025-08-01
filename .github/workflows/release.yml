@@ -174,9 +174,6 @@ jobs:
         
         cd ${PKG_DIR}
         
-        # Update version in package.json
-        npm version ${{ needs.prepare-release.outputs.version }} --no-git-tag-version
-        
         # Set the correct scoped package name
         case "${{ matrix.target }}" in
           "web")
@@ -190,9 +187,10 @@ jobs:
             ;;
         esac
         
-        # Update package.json with scoped name and metadata
-        jq --arg name "$PACKAGE_NAME" '. + {
+        # Update package.json with version, scoped name and metadata
+        jq --arg name "$PACKAGE_NAME" --arg version "${{ needs.prepare-release.outputs.version }}" '. + {
           "name": $name,
+          "version": $version,
           "repository": {
             "type": "git",
             "url": "git+https://github.com/${{ github.repository }}.git"
