@@ -108,7 +108,7 @@ describe('Rustreexo WASM Node.js Tests', () => {
         }
       ];
 
-      testVectors.forEach(({ hex, description }) => {
+      testVectors.forEach(({ hex, description: _description }) => {
         const hash = new wasmModule.Hash(hex);
         wasmObjects.push(hash);
         

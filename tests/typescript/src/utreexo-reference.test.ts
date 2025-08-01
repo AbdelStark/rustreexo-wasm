@@ -65,10 +65,9 @@ describe('Rustreexo WASM Reference Tests', () => {
       
       // Add elements (if method exists)
       try {
-        for (const hash of testHashes) {
-          // This would depend on the actual API available
-          // stump.add(hash);
-        }
+        // This would depend on the actual API available
+        // testHashes.forEach(hash => stump.add(hash));
+        console.log(`Would process ${testHashes.length} test hashes`);
       } catch (error) {
         console.log('Add method not available or different API');
       }
