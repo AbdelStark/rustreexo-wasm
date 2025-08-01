@@ -79,8 +79,13 @@ jobs:
 
     - name: Update Cargo.toml version
       run: |
-        sed -i 's/^version = .*/version = "${{ needs.prepare-release.outputs.version }}"/' Cargo.toml
-        echo "Updated Cargo.toml version to ${{ needs.prepare-release.outputs.version }}"
+        # Only update the package version, not dependency versions
+        sed -i '/^\[package\]/,/^\[/ s/^version = .*/version = "${{ needs.prepare-release.outputs.version }}"/' Cargo.toml
+        echo "Updated Cargo.toml package version to ${{ needs.prepare-release.outputs.version }}"
+        
+        # Verify the change
+        echo "Package section after update:"
+        sed -n '/^\[package\]/,/^\[/p' Cargo.toml
 
     - name: Build all WASM targets
       run: |
