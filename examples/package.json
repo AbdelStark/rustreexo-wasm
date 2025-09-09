@@ -10,7 +10,7 @@
     "serve": "npx serve . -p 8000"
   },
   "dependencies": {
-    "serve": "^14.0.0"
+    "serve": "^14.2.5"
   },
   "keywords": [
     "utreexo",
